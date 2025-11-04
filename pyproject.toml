@@ -8,6 +8,7 @@ dependencies = [
     "datasets>=4.4.0",
     "ipykernel>=7.1.0",
     "numpy>=2.3.4",
+    "pandas>=2.3.3",
     "pyarrow>=22.0.0",
     "pytest>=8.4.2",
     "transformers>=4.57.1",

@@ -21,7 +21,7 @@ import torch.distributed as dist
 from torch.multiprocessing import Process
 
 from data_parallel.dataset import partition_dataset
-from .utils import (
+from project.utils import (
     get_tokenizer,
     evaluate_bleu,
     save_grad_weights,
@@ -221,6 +221,11 @@ def run_dp(
 
 
 if __name__ == "__main__":
+    # Set the multiprocessing start method to 'spawn' to avoid CUDA initialization issues
+    # with forked processes. Must be called before creating any Process objects.
+    import torch.multiprocessing as mp
+    mp.set_start_method('spawn', force=True)
+    
     parser = argparse.ArgumentParser()
     parser.add_argument("--pytest", type=bool, default=False)
     parser.add_argument(

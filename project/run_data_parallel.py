@@ -1,3 +1,4 @@
+from multiprocessing import process
 import sys
 from pathlib import Path
 
@@ -20,7 +21,7 @@ import torch.distributed as dist
 from torch.multiprocessing import Process
 
 from data_parallel.dataset import partition_dataset
-from utils import (
+from .utils import (
     get_tokenizer,
     evaluate_bleu,
     save_grad_weights,
@@ -41,7 +42,13 @@ def average_gradients(model):
     3. Average the gradients over the world_size (total number of devices)
     """
     # BEGIN ASSIGN5_1_2
-    raise NotImplementedError("Data Parallel Not Implemented Yet")
+    # 1. Iterate through the parameters of the model
+    for param in model.parameters():
+        if param.requires_grad:
+            # 2. Use `torch.distributed` package and call the reduce fucntion to aggregate the gradients of all the parameters
+            dist.all_reduce(param.grad.data, op=dist.ReduceOp.SUM)
+            # 3. Average the gradients over the world_size (total number of devices)
+            param.grad.data /= world_size
     # END ASSIGN5_1_2
 
 
@@ -239,10 +246,27 @@ if __name__ == "__main__":
     2. You should start the processes to work and terminate resources properly
     """
     # BEGIN ASSIGN5_1_3
-    world_size = None  # TODO: Define the number of GPUs
-    backend = (
-        None  # TODO: Define your backend for communication, we suggest using 'nccl'
-    )
+    world_size = args.world_size
+    backend = dist.Backend.NCCL if torch.cuda.is_available() else dist.Backend.GLOO
 
-    raise NotImplementedError("Data Parallel Not Implemented Yet")
+    for rank in range(world_size):
+        p = Process(
+            target=run_dp,
+            args=(
+                rank,
+                world_size,
+                backend,
+                args.dataset,
+                args.model_max_length,
+                args.n_epochs,
+                args.batch_size,
+                args.learning_rate,
+            ),
+        )
+        p.start()
+        processes.append(p)
+
+    for p in processes:
+        p.join()
+
     # END ASSIGN5_1_3

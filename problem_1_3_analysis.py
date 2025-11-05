@@ -55,11 +55,13 @@ def compute_aggregated_metrics(metrics_by_rank, drop_first_epoch=True):
                 epoch_training_times.append(epoch_data['training_time'])
                 epoch_tokens_per_sec.append(epoch_data['tokens_per_sec'])
         
-        # Average training time across ranks for this epoch
-        all_training_times.append(np.mean(epoch_training_times))
+        # Average training time across ranks for this epoch (only if we have data)
+        if epoch_training_times:
+            all_training_times.append(np.mean(epoch_training_times))
         
-        # Sum tokens_per_sec across ranks (total throughput) for this epoch
-        all_tokens_per_sec_by_epoch.append(np.sum(epoch_tokens_per_sec))
+        # Sum tokens_per_sec across ranks (total throughput) for this epoch (only if we have data)
+        if epoch_tokens_per_sec:
+            all_tokens_per_sec_by_epoch.append(np.sum(epoch_tokens_per_sec))
     
     # Now compute mean and std across epochs
     # Check if we have any data to compute statistics

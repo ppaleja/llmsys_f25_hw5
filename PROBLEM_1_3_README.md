@@ -8,9 +8,13 @@ This directory contains tools for comparing performance between single device an
 - **`problem_1_3_analysis.py`**: Standalone Python script for analyzing metrics from existing runs
 - **`submit/figures/`**: Directory where output figures are saved
 
-## Option 1: Using the Jupyter Notebook (Recommended for Modal)
+## Recommended Approach
 
-The Jupyter notebook (`problem_1_3_notebook.ipynb`) is designed to run in Modal's notebook environment. It will:
+We recommend using **Option 2** (the standalone analysis script) for most users, as it's simpler and works locally or on PSC machines. Use Option 1 if you specifically need to run everything in Modal's cloud infrastructure.
+
+## Option 1: Using the Jupyter Notebook (For Modal Cloud Environment)
+
+The Jupyter notebook (`problem_1_3_notebook.ipynb`) is designed to run in Modal's notebook environment or Modal app. It will:
 
 1. Set up Modal infrastructure
 2. Run single device training (world_size=1, batch_size=64)
@@ -19,11 +23,26 @@ The Jupyter notebook (`problem_1_3_notebook.ipynb`) is designed to run in Modal'
 5. Generate comparison plots
 6. Save figures to `submit/figures/`
 
+### Prerequisites:
+
+```bash
+pip install modal
+modal token new  # Authenticate with Modal
+```
+
 ### Usage:
 
-1. Open the notebook in Modal's notebook environment
-2. Run all cells sequentially
-3. The notebook will execute both training runs and generate plots automatically
+1. Upload the project to Modal or run in Modal's notebook environment
+2. Open the notebook (`problem_1_3_notebook.ipynb`)
+3. Run all cells sequentially
+4. The notebook will:
+   - Set up Modal infrastructure
+   - Execute training runs (this may take 1-2 hours depending on GPU availability)
+   - Collect metrics automatically
+   - Generate and display plots
+5. Figures are saved to `submit/figures/`
+
+**Note:** This approach requires Modal credits and may incur costs.
 
 ## Option 2: Using the Analysis Script (For Local/PSC Runs)
 

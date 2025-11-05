@@ -106,10 +106,6 @@ def run_pp(
         shuffle=False,
         collate_fn=collate_fn,
     )
-    test_loader = DataLoader(
-        dataset["test"], batch_size=batch_size, shuffle=False, collate_fn=collate_fn
-    )
-
     total_time = []
     total_tokens_per_sec = []
 

@@ -13,7 +13,7 @@ image = (
     .pip_install(
         "numpy<2",  # Fix numpy version compatibility
         "torch==2.2.0",
-        "datasets<4.0.0",
+        "datasets>=2.4.0,<4.0.0",
         "transformers==4.37.2",
         "sacrebleu==2.4.0",
         "tokenizers",

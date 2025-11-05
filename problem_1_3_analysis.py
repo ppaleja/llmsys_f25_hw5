@@ -62,6 +62,16 @@ def compute_aggregated_metrics(metrics_by_rank, drop_first_epoch=True):
         all_tokens_per_sec_by_epoch.append(np.sum(epoch_tokens_per_sec))
     
     # Now compute mean and std across epochs
+    # Check if we have any data to compute statistics
+    if len(all_training_times) == 0:
+        return {
+            'avg_training_time': 0.0,
+            'std_training_time': 0.0,
+            'avg_tokens_per_sec': 0.0,
+            'std_tokens_per_sec': 0.0,
+            'world_size': world_size,
+        }
+    
     avg_training_time = np.mean(all_training_times)
     std_training_time = np.std(all_training_times)
     
@@ -192,13 +202,16 @@ def main():
     print(f"  Training Time: {aggregated_multi['avg_training_time']:.2f} ± {aggregated_multi['std_training_time']:.2f} seconds")
     print(f"  Tokens/Second: {aggregated_multi['avg_tokens_per_sec']:.2f} ± {aggregated_multi['std_tokens_per_sec']:.2f}")
     
-    # Calculate speedup
-    time_speedup = aggregated_single['avg_training_time'] / aggregated_multi['avg_training_time']
-    throughput_speedup = aggregated_multi['avg_tokens_per_sec'] / aggregated_single['avg_tokens_per_sec']
-    
-    print(f"\nSpeedup:")
-    print(f"  Training Time Speedup: {time_speedup:.2f}x")
-    print(f"  Throughput Speedup: {throughput_speedup:.2f}x")
+    # Calculate speedup (with validation to avoid division by zero)
+    if aggregated_multi['avg_training_time'] > 0 and aggregated_single['avg_tokens_per_sec'] > 0:
+        time_speedup = aggregated_single['avg_training_time'] / aggregated_multi['avg_training_time']
+        throughput_speedup = aggregated_multi['avg_tokens_per_sec'] / aggregated_single['avg_tokens_per_sec']
+        
+        print(f"\nSpeedup:")
+        print(f"  Training Time Speedup: {time_speedup:.2f}x")
+        print(f"  Throughput Speedup: {throughput_speedup:.2f}x")
+    else:
+        print(f"\nSpeedup: Cannot compute (insufficient data)")
     
     # Create visualizations
     print(f"\nGenerating plots...")

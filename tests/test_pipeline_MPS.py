@@ -84,13 +84,13 @@ def test_split_module_1():
 def test_forward_0(batch_size, split_size):
     # Build model initially on MPS
     model = nn.Sequential(
-        nn.Linear(3, 4).to("mps"),
-        WithDevice(nn.Sigmoid(), "mps"),
-        nn.Linear(4, 5).to("mps"),
-        WithDevice(nn.Sigmoid(), "mps"),
+        nn.Linear(3, 4).to("mps:0"),
+        WithDevice(nn.Sigmoid(), "mps:0"),
+        nn.Linear(4, 5).to("mps:0"),
+        WithDevice(nn.Sigmoid(), "mps:0"),
     )
 
-    x = torch.randn(batch_size, 3).to("mps")
+    x = torch.randn(batch_size, 3).to("mps:0")
     y0 = model(x).to("cpu")
 
     # move the last two layer to another device (use CPU as the second device)

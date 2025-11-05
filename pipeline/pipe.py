@@ -31,9 +31,8 @@ def _clock_cycles(
     # BEGIN ASSIGN5_2_1
     for k in range(num_batches + num_partitions - 1):
         yield [
-            (i, j)
-            for i in range(min(k + 1, num_batches))
-            for j in range(min(k - i + 1, num_partitions))
+            (i, k - i)
+            for i in range(max(0, k - num_partitions + 1), min(k + 1, num_batches))
         ]
     # END ASSIGN5_2_1
 

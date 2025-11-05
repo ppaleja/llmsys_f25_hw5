@@ -1,5 +1,5 @@
 import sys
-from typing import Any, Iterable, Iterator, List, Optional, Union, Sequence, Tuple, cast
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Union, Sequence, Tuple, cast
 from queue import Queue
 from threading import Thread
 
@@ -16,12 +16,15 @@ from contextlib import contextmanager
 from typing import Generator, List, Union, cast
 @contextmanager
 def use_device(device: torch.device) -> Generator[None, None, None]:
-    """:func:`torch.cuda.device` for either CPU or CUDA device."""
-    if device.type != "cuda":
+    """Device context manager for CPU, CUDA, or MPS device."""
+    if device.type == "cuda":
+        with torch.cuda.device(device):
+            yield
+    elif device.type == "mps":
+        # MPS doesn't need special device context like CUDA
         yield
-        return
-
-    with torch.cuda.device(device):
+    else:
+        # CPU or other devices
         yield
 
 class Task:
@@ -78,6 +81,9 @@ def create_workers(devices: List[torch.device],) -> Tuple[List[InQueue], List[Ou
     def normalize_device(device: torch.device) -> torch.device:
         if device.type == "cuda" and device.index is None:
             return torch.device("cuda", index=torch.cuda.current_device())
+
+        if device.type == "mps" and device.index is None:
+            return torch.device("mps:0")
 
         if device.type == "cpu" and device.index is not None:
             return torch.device("cpu")

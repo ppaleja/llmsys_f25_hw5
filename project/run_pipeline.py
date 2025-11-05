@@ -49,8 +49,11 @@ def run_pp(
     config = AutoConfig.from_pretrained("gpt2")
     config.save_pretrained(workdir)
 
-    device_count = torch.cuda.device_count()
-    first_device = "cuda:0" if device_count > 0 else "cpu"
+    # Check for MPS availability on macOS, fallback to CPU
+    if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+        first_device = "mps:0"
+    else:
+        first_device = "cpu"
 
     split_size = math.ceil(batch_size / n_chunk)
 

@@ -40,10 +40,9 @@ def run_pp(
     batch_size=32,
     n_chunk=4,  # the number of microbatches for pipeline parallelism
     learning_rate=1e-4,
-    device="cuda",
-    model_parallel_mode=None,
-):
-    workdir = f"./workdir"
+    device='mps',
+    model_parallel_mode=None):
+    workdir = f'./workdir'
     os.makedirs(workdir, exist_ok=True)
 
     config = AutoConfig.from_pretrained("gpt2")

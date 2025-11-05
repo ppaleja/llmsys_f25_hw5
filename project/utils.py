@@ -200,6 +200,6 @@ def save_grad_weights(model, rank):
         if param.grad is not None:
             gradients[name] = param.grad.data.detach().cpu()
     # Use configurable save directory (defaults to cousin_dir / "tests")
-    save_dir = Path(os.environ.get("GRADIENT_SAVE_DIR", cousin_dir / "tests"))
+    save_dir = Path(os.environ.get("GRADIENT_SAVE_DIR", str(cousin_dir / "tests")))
     save_dir.mkdir(parents=True, exist_ok=True)
     torch.save(gradients, save_dir / f"model{rank}_gradients.pth")

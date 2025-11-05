@@ -30,7 +30,16 @@ def compute_aggregated_metrics(metrics_by_rank, drop_first_epoch=True):
     all_tokens_per_sec_by_epoch = []
     
     world_size = len(metrics_by_rank)
-    n_epochs = len(metrics_by_rank[0]) if metrics_by_rank else 0
+    # Check if metrics_by_rank is non-empty and contains data before accessing
+    if not metrics_by_rank or 0 not in metrics_by_rank:
+        return {
+            'avg_training_time': 0.0,
+            'std_training_time': 0.0,
+            'avg_tokens_per_sec': 0.0,
+            'std_tokens_per_sec': 0.0,
+            'world_size': world_size,
+        }
+    n_epochs = len(metrics_by_rank[0])
     
     start_epoch = 1 if drop_first_epoch else 0
     
@@ -115,7 +124,7 @@ def plot_comparison(means, stds, labels, ylabel, title, filename, output_dir='su
     
     # Add value labels on bars
     for i, (mean, std) in enumerate(zip(means, stds)):
-        ax.text(i, mean, f'{mean:.2f}\\n±{std:.2f}', 
+        ax.text(i, mean, f'{mean:.2f}\n±{std:.2f}', 
                 ha='center', va='bottom', fontsize=10)
     
     plt.tight_layout()

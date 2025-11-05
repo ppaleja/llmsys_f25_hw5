@@ -7,6 +7,7 @@ sys.path.append(str(cousin_dir))
 
 from functools import partial
 import time
+from datetime import timedelta
 import os
 import argparse
 import tqdm
@@ -31,25 +32,27 @@ from .utils import (
     train,
 )
 
-PYTEST = False
+# Read the PYTEST flag from the environment by default. This allows external
+# wrappers (like the Modal wrapper) to set PYTEST via environment variables
+# before spawning processes. CLI args parsed at the bottom will still override
+# this value if provided.
+PYTEST = os.environ.get("PYTEST", "False").lower() in ("1", "true", "yes")
 
 
 def average_gradients(model):
     """Aggregate the gradients from different GPUs
 
     1. Iterate through the parameters of the model
-    2. Use `torch.distributed` package and call the reduce fucntion to aggregate the gradients of all the parameters
+    2. Use `torch.distributed` package and call the reduce function to aggregate the gradients of all the parameters
     3. Average the gradients over the world_size (total number of devices)
     """
-    # BEGIN ASSIGN5_1_2
-    # 1. Iterate through the parameters of the model
+    # Use runtime world size from torch.distributed to avoid relying on a global var
+    world_size = dist.get_world_size()
     for param in model.parameters():
-        if param.requires_grad:
-            # 2. Use `torch.distributed` package and call the reduce fucntion to aggregate the gradients of all the parameters
+        # Ensure there is a gradient to reduce
+        if param.requires_grad and param.grad is not None:
             dist.all_reduce(param.grad.data, op=dist.ReduceOp.SUM)
-            # 3. Average the gradients over the world_size (total number of devices)
             param.grad.data /= world_size
-    # END ASSIGN5_1_2
 
 
 def setup(rank, world_size, backend):
@@ -58,15 +61,23 @@ def setup(rank, world_size, backend):
     1. Set the environment variables `MASTER_ADDR` as `localhost` or `127.0.0.1`  and `MASTER_PORT` as `11868`
     2. Use `torch.distributed` to init the process group
     """
-    # BEGIN ASSIGN5_1_2
     # 1. Set the environment variables `MASTER_ADDR` as `localhost` or `127.0.0.1`  and `MASTER_PORT` as `11868`
     os.environ["MASTER_ADDR"] = "localhost"
     os.environ["MASTER_PORT"] = "11868"
+
+    print(
+        f"[rank {rank}] Initializing process group with backend={backend}, world_size={world_size}"
+    )
+
     # 2. Use `torch.distributed` to init the process group
     torch.distributed.init_process_group(
-        backend=backend, rank=rank, world_size=world_size
+        backend=backend,
+        rank=rank,
+        world_size=world_size,
+        timeout=timedelta(seconds=60),
     )
-    # END ASSIGN5_1_2
+
+    print(f"[rank {rank}] Process group initialized successfully")
 
 
 def run_dp(
@@ -97,6 +108,7 @@ def run_dp(
         for split in ["train", "validation", "test"]
     }
     src_key, tgt_key = "de", "en"
+    print(f"[rank {rank}] Successfully loaded dataset")
 
     ### MAKE SMALLER
     dataset["train"] = dataset["train"][:5000]
@@ -223,9 +235,7 @@ def run_dp(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--pytest", type=bool, default=False)
-    parser.add_argument(
-        "--dataset", type=str, default="bbaaaa/iwslt14-de-en-preprocess"
-    )
+    parser.add_argument("--dataset", type=str, default="wmt16")
     parser.add_argument("--model_max_length", type=int, default=128)
     parser.add_argument("--n_epochs", type=int, default=10)
     parser.add_argument("--batch_size", type=int, default=128)

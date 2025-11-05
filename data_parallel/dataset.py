@@ -36,10 +36,14 @@ class DataPartitioner:
         # 2. Create different partitions of indices according to `sizes` and store in `self.partitions`
         partition_sizes = [int(s * len(data)) for s in sizes]
         partition_sizes[-1] = len(data) - sum(partition_sizes[:-1])
-        self.partitions = [
-            Partition(data, indices[i : i + size])
-            for i, size in enumerate(partition_sizes)
-        ]
+
+        # FIX: Use cumulative offsets to avoid overlapping partitions
+        start_idx = 0
+        for size in partition_sizes:
+            self.partitions.append(
+                Partition(data, indices[start_idx : start_idx + size])
+            )
+            start_idx += size
         # END ASSIGN5_1_1
 
     def use(self, partition):
@@ -48,7 +52,8 @@ class DataPartitioner:
         Just one line of code. Think it simply.
         """
         # BEGIN ASSIGN5_1_1
-        return Partition(self.data, self.partitions[partition].index)
+        # FIX: Return the partition object directly (it's already a Partition)
+        return self.partitions[partition]
         # END ASSIGN5_1_1
 
 
@@ -68,7 +73,9 @@ def partition_dataset(rank, world_size, dataset, batch_size=128, collate_fn=None
     # 1. Calculate the partitioned batch size
     partitioned_batch_size = batch_size // world_size
     # 2. Create a partitioner class `DataPartitioner` with dataset and the list of partitioned sizes
-    partitioner = DataPartitioner(dataset, [partitioned_batch_size] * world_size)
+    # FIX: Use fractional sizes (summing to 1.0) so DataPartitioner splits the dataset correctly
+    sizes = [1.0 / world_size] * world_size
+    partitioner = DataPartitioner(dataset, sizes)
     # 3. Get the current partition dataset given `rank`, use the `use` function in DataPartitioner
     partition = partitioner.use(rank)
     # 4. Wrap the dataset with `DataLoader`, remember to customize the `collate_fn`

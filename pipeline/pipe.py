@@ -1,12 +1,13 @@
-from typing import Any, Iterable, Iterator, List, Optional, Union, Sequence, Tuple, cast
+from typing import Any, Iterable, Iterator, List, Optional, Sequence, Tuple, Union, cast
 
-from pyarrow.compute import PartitionNthOptions
 import torch
-from torch import Tensor, nn
 import torch.autograd
 import torch.cuda
-from .worker import Task, create_workers
+from pyarrow.compute import PartitionNthOptions
+from torch import Tensor, nn
+
 from .partition import _split_module
+from .worker import Task, create_workers
 
 
 def _clock_cycles(
@@ -124,5 +125,10 @@ class Pipe(nn.Module):
                 task_obj, result = payload
 
                 # Update the batch with the result
-                batches[micro_idx] = result
+                # Handle case where result might be a tuple (from model outputs)
+                if isinstance(result, tuple) and len(result) > 0:
+                    # Take the first element if it's a tuple (typically the hidden states)
+                    batches[micro_idx] = result[0]
+                else:
+                    batches[micro_idx] = result
         # END ASSIGN5_2_2

@@ -4,29 +4,31 @@ from pathlib import Path
 cousin_dir = Path(__file__).resolve().parents[1]
 sys.path.append(str(cousin_dir))
 
-from functools import partial
-import time
-import os
 import argparse
-import math
-import tqdm
 import json
+import math
+import os
 import random
+import time
+from functools import partial
+
 import datasets
 import numpy as np
-from sacrebleu.metrics import BLEU
-from transformers import AutoConfig, AutoTokenizer, GPT2LMHeadModel
-from tokenizers import ByteLevelBPETokenizer
 import torch
 import torch.nn as nn
+import tqdm
+from sacrebleu.metrics import BLEU
+from tokenizers import ByteLevelBPETokenizer
 from torch.utils.data import DataLoader
+from transformers import AutoConfig, AutoTokenizer, GPT2LMHeadModel
+
 from pipeline.model_parallel import GPT2LMHeadModelParallel
-from utils import (
-    get_tokenizer,
-    evaluate_bleu,
+from project.utils import (
     collate_batch,
+    evaluate_bleu,
     evaluate_loss,
     generate,
+    get_tokenizer,
     train,
 )
 
@@ -40,19 +42,25 @@ def run_pp(
     batch_size=32,
     n_chunk=4,  # the number of microbatches for pipeline parallelism
     learning_rate=1e-4,
-    device='mps',
-    model_parallel_mode=None):
-    workdir = f'./workdir'
+    device="mps",
+    model_parallel_mode=None,
+):
+    workdir = f"./workdir"
     os.makedirs(workdir, exist_ok=True)
 
     config = AutoConfig.from_pretrained("gpt2")
     config.save_pretrained(workdir)
 
-    # Check for MPS availability on macOS, fallback to CPU
-    if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+    # Use the device passed in. Respect the caller's device choice.
+    # If it's a generic "cuda", normalize to "cuda:0"
+    if device == "cuda":
+        first_device = "cuda:0"
+    elif device and device.startswith("cuda"):
+        first_device = device
+    elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
         first_device = "mps:0"
     else:
-        first_device = "cpu"
+        first_device = device if device else "cpu"
 
     split_size = math.ceil(batch_size / n_chunk)
 
@@ -68,9 +76,9 @@ def run_pp(
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 
     dataset = {
-        split: datasets.load_dataset("iwslt2017", "iwslt2017-de-en", split=split)[
-            "translation"
-        ]
+        split: datasets.load_dataset(
+            "iwslt2017", "iwslt2017-de-en", split=split, trust_remote_code=True
+        )["translation"]
         for split in ["train", "validation", "test"]
     }
     src_key, tgt_key = "de", "en"

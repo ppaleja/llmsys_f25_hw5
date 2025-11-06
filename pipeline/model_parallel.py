@@ -47,12 +47,13 @@ class GPT2ModelParallel(GPT2ModelCustom):
         # Each GPT2Block returns a tuple, so we extract only the hidden states with ExtractFirstItem
         layers = []
         for block in self.h:
-            layers.extend([block, ExtractFirstItem()])
-
-        # 3. Use Pipe to parallelize the transformer layers.
+            dev = next(block.parameters()).device
+            # Build layers with explicit device so ExtractFirstItem doesn’t default to CPU
+            layers.extend([block, WithDevice(ExtractFirstItem(), dev)])
         pipe = Pipe(nn.Sequential(*layers), split_size=split_size)
         # END ASSIGN5_2_3
         self.h_pp = pipe
+        # END ASSIGN5_2_3
 
 
 class GPT2LMHeadModelParallel(GPT2LMHeadModelCustom):

@@ -4,15 +4,15 @@ from typing import Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
+from transformers import AutoConfig, GPT2Model, GPT2PreTrainedModel
 from transformers.modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
-    CausalLMOutputWithCrossAttentions
+    CausalLMOutputWithCrossAttentions,
 )
 
-from transformers import AutoConfig, GPT2Model, GPT2PreTrainedModel
-
-from .pipe import Pipe
 from .partition import WithDevice, _retrieve_device
+from .pipe import Pipe
+
 
 def get_device_map(n_layers, devices):
     """Returns a dictionary of layers distributed evenly across all devices."""
@@ -31,14 +31,20 @@ class GPT2ModelCustom(GPT2Model):
         self.h_pp = None
 
     def parallelize(self, device_map=None):
-        '''
+        """
         Distribute the model layers across the devices based on the device_map.
-        '''
+        """
         self.device_map = (
-            get_device_map(len(self.h), range(torch.cuda.device_count())) if device_map is None else device_map
+            get_device_map(len(self.h), range(torch.cuda.device_count()))
+            if device_map is None
+            else device_map
         )
         self.model_parallel = True
-        self.first_device = "cpu" if "cpu" in self.device_map.keys() else "cuda:" + str(min(self.device_map.keys()))
+        self.first_device = (
+            "cpu"
+            if "cpu" in self.device_map.keys()
+            else "cuda:" + str(min(self.device_map.keys()))
+        )
         self.last_device = "cuda:" + str(max(self.device_map.keys()))
         self.wte = self.wte.to(self.first_device)
         self.wpe = self.wpe.to(self.first_device)
@@ -62,11 +68,10 @@ class GPT2ModelCustom(GPT2Model):
         self.ln_f = self.ln_f.to("cpu")
         torch.cuda.empty_cache()
 
-
     def _prune_heads(self, heads_to_prune):
         for layer, heads in heads_to_prune.items():
             self.h[layer].attn.prune_heads(heads)
-        
+
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -83,15 +88,25 @@ class GPT2ModelCustom(GPT2Model):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
+        )
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+            raise ValueError(
+                "You cannot specify both input_ids and inputs_embeds at the same time"
+            )
         elif input_ids is not None:
             self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
@@ -114,7 +129,12 @@ class GPT2ModelCustom(GPT2Model):
         else:
             past_length = past_key_values[0][0].size(-2)
         if position_ids is None:
-            position_ids = torch.arange(past_length, input_shape[-1] + past_length, dtype=torch.long, device=device)
+            position_ids = torch.arange(
+                past_length,
+                input_shape[-1] + past_length,
+                dtype=torch.long,
+                device=device,
+            )
             position_ids = position_ids.unsqueeze(0)
 
         # GPT2Attention mask.
@@ -140,7 +160,9 @@ class GPT2ModelCustom(GPT2Model):
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
         if self.config.add_cross_attention and encoder_hidden_states is not None:
-            encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
+            encoder_batch_size, encoder_sequence_length, _ = (
+                encoder_hidden_states.size()
+            )
             encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
             if encoder_attention_mask is None:
                 encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
@@ -169,7 +191,9 @@ class GPT2ModelCustom(GPT2Model):
 
         presents = () if use_cache else None
         all_self_attentions = () if output_attentions else None
-        all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
+        all_cross_attentions = (
+            () if output_attentions and self.config.add_cross_attention else None
+        )
         all_hidden_states = () if output_hidden_states else None
 
         # new code added
@@ -182,7 +206,10 @@ class GPT2ModelCustom(GPT2Model):
                     torch.cuda.set_device(hidden_states.device)
                     # Ensure layer_past is on same device as hidden_states (might not be correct)
                     if layer_past is not None:
-                        layer_past = tuple(past_state.to(hidden_states.device) for past_state in layer_past)
+                        layer_past = tuple(
+                            past_state.to(hidden_states.device)
+                            for past_state in layer_past
+                        )
                     # Ensure that attention_mask is always on the same device as hidden_states
                     if attention_mask is not None:
                         attention_mask = attention_mask.to(hidden_states.device)
@@ -192,14 +219,14 @@ class GPT2ModelCustom(GPT2Model):
                     all_hidden_states = all_hidden_states + (hidden_states,)
 
                 outputs = block(
-                        hidden_states,
-                        layer_past=layer_past,
-                        attention_mask=attention_mask,
-                        head_mask=head_mask[i],
-                        encoder_hidden_states=encoder_hidden_states,
-                        encoder_attention_mask=encoder_attention_mask,
-                        use_cache=use_cache,
-                        output_attentions=output_attentions,
+                    hidden_states,
+                    layer_past=layer_past,
+                    attention_mask=attention_mask,
+                    head_mask=head_mask[i],
+                    encoder_hidden_states=encoder_hidden_states,
+                    encoder_attention_mask=encoder_attention_mask,
+                    use_cache=use_cache,
+                    output_attentions=output_attentions,
                 )
 
                 hidden_states = outputs[0]
@@ -207,9 +234,13 @@ class GPT2ModelCustom(GPT2Model):
                     presents = presents + (outputs[1],)
 
                 if output_attentions:
-                    all_self_attentions = all_self_attentions + (outputs[2 if use_cache else 1],)
+                    all_self_attentions = all_self_attentions + (
+                        outputs[2 if use_cache else 1],
+                    )
                     if self.config.add_cross_attention:
-                        all_cross_attentions = all_cross_attentions + (outputs[3 if use_cache else 2],)
+                        all_cross_attentions = all_cross_attentions + (
+                            outputs[3 if use_cache else 2],
+                        )
 
                 # Model Parallel: If it's the last layer for that device, put things on the next device
                 if self.model_parallel:
@@ -227,7 +258,13 @@ class GPT2ModelCustom(GPT2Model):
         if not return_dict:
             return tuple(
                 v
-                for v in [hidden_states, presents, all_hidden_states, all_self_attentions, all_cross_attentions]
+                for v in [
+                    hidden_states,
+                    presents,
+                    all_hidden_states,
+                    all_self_attentions,
+                    all_cross_attentions,
+                ]
                 if v is not None
             )
 
@@ -245,7 +282,9 @@ class GPT2LMHeadModelCustom(GPT2PreTrainedModel):
 
     def __init__(self, config, transformer=None):
         super().__init__(config)
-        self.transformer = GPT2ModelCustom(config) if transformer is None else transformer
+        self.transformer = (
+            GPT2ModelCustom(config) if transformer is None else transformer
+        )
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
 
         # Model parallel
@@ -273,7 +312,9 @@ class GPT2LMHeadModelCustom(GPT2PreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
-    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, inputs_embeds=None, **kwargs):
+    def prepare_inputs_for_generation(
+        self, input_ids, past_key_values=None, inputs_embeds=None, **kwargs
+    ):
         token_type_ids = kwargs.get("token_type_ids", None)
         # Omit tokens covered by past_key_values
         if past_key_values:
@@ -343,7 +384,9 @@ class GPT2LMHeadModelCustom(GPT2PreTrainedModel):
             `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
             are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         transformer_outputs = self.transformer(
             input_ids,
@@ -378,7 +421,9 @@ class GPT2LMHeadModelCustom(GPT2PreTrainedModel):
             shift_labels = labels[..., 1:].contiguous()
             # Flatten the tokens
             loss_fct = CrossEntropyLoss()
-            loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+            loss = loss_fct(
+                shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1)
+            )
 
         if not return_dict:
             output = (lm_logits,) + transformer_outputs[1:]
@@ -403,6 +448,9 @@ class GPT2LMHeadModelCustom(GPT2PreTrainedModel):
         beam_idx at every generation step.
         """
         return tuple(
-            tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
+            tuple(
+                past_state.index_select(0, beam_idx.to(past_state.device))
+                for past_state in layer_past
+            )
             for layer_past in past_key_values
         )

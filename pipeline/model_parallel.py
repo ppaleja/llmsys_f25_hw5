@@ -51,7 +51,6 @@ class GPT2ModelParallel(GPT2ModelCustom):
             # Build layers with explicit device so ExtractFirstItem doesn’t default to CPU
             layers.extend([block, WithDevice(ExtractFirstItem(), dev)])
         pipe = Pipe(nn.Sequential(*layers), split_size=split_size)
-        # END ASSIGN5_2_3
         self.h_pp = pipe
         # END ASSIGN5_2_3
 
@@ -73,7 +72,12 @@ class GPT2LMHeadModelParallel(GPT2LMHeadModelCustom):
 
 if __name__ == "__main__":
     config = AutoConfig.from_pretrained("gpt2")
-    # Use MPS if available, otherwise CPU
-    device = "mps:0" if (hasattr(torch.backends, "mps") and torch.backends.mps.is_available()) else "cpu"
+    # Infer device: prioritize CUDA, then MPS, then CPU
+    if torch.cuda.is_available():
+        device = "cuda"
+    elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+        device = "mps"
+    else:
+        device = "cpu"
     model = GPT2LMHeadModelParallel(config=config).to(device)
     model._prepare_pipeline_parallel()

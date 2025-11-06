@@ -54,6 +54,26 @@ llmsys_f25_hw5/
 
 ## Installation
 
+### Quick Start
+
+For the fastest way to get started:
+
+1. Clone and navigate to the repository:
+```bash
+git clone https://github.com/ppaleja/llmsys_f25_hw5.git
+cd llmsys_f25_hw5
+```
+
+2. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+3. Run the demo notebook:
+```bash
+jupyter notebook demo.ipynb
+```
+
 ### Prerequisites
 - Python 3.9+ (3.11 recommended for Modal deployment)
 - CUDA-compatible GPUs (at least 2 GPUs for distributed training)
@@ -156,6 +176,25 @@ The training scripts automatically collect and report:
 - **Tokens Per Second**: Throughput metric for training efficiency
 
 Results are saved in JSON format in the `workdir/` directory for further analysis.
+
+## Demo Notebook
+
+A comprehensive Jupyter notebook (`demo.ipynb`) is included that demonstrates:
+- Installation and dependency setup
+- Data parallel training concepts and implementation
+- Pipeline parallel training concepts and implementation
+- Performance visualization and analysis
+- Comparison between different parallelism strategies
+
+To run the notebook:
+```bash
+jupyter notebook demo.ipynb
+```
+
+Or use JupyterLab:
+```bash
+jupyter lab demo.ipynb
+```
 
 ## Visualization
 

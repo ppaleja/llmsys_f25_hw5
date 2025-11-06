@@ -1,17 +1,22 @@
-from typing import Any, Iterable, Iterator, List, Optional, Union, Sequence, Tuple, cast
+from typing import Any, Iterable, Iterator, List, Optional, Sequence, Tuple, Union, cast
 
 import torch
-from torch import Tensor, nn
 import torch.autograd
 import torch.cuda
-from .worker import Task, create_workers
-from .partition import _split_module
+from pyarrow.compute import PartitionNthOptions
+from torch import Tensor, nn
 
-def _clock_cycles(num_batches: int, num_partitions: int) -> Iterable[List[Tuple[int, int]]]:
-    '''Generate schedules for each clock cycle.
+from .partition import _split_module
+from .worker import Task, create_workers
+
+
+def _clock_cycles(
+    num_batches: int, num_partitions: int
+) -> Iterable[List[Tuple[int, int]]]:
+    """Generate schedules for each clock cycle.
 
     An example of the generated schedule for m=3 and n=3 is as follows:
-    
+
     k (i,j) (i,j) (i,j)
     - ----- ----- -----
     0 (0,0)
@@ -24,10 +29,15 @@ def _clock_cycles(num_batches: int, num_partitions: int) -> Iterable[List[Tuple[
 
     Each schedule is a list of tuples. Each tuple contains the index of micro-batch and the index of partition.
     This function should yield schedules for each clock cycle.
-    '''
+    """
     # BEGIN ASSIGN5_2_1
-    raise NotImplementedError("Schedule Generation Not Implemented Yet")
+    for k in range(num_batches + num_partitions - 1):
+        schedule = []
+        for i in range(max(0, k - num_partitions + 1), min(k + 1, num_batches)):
+            schedule.append((i, k - i))
+        yield schedule
     # END ASSIGN5_2_1
+
 
 class Pipe(nn.Module):
     def __init__(
@@ -42,33 +52,83 @@ class Pipe(nn.Module):
         (self.in_queues, self.out_queues) = create_workers(self.devices)
 
     def forward(self, x):
-        ''' Forward the input x through the pipeline. The return value should be put in the last device.
+        """Forward the input x through the pipeline. The return value should be put in the last device.
 
         Hint:
         1. Divide the input mini-batch into micro-batches.
         2. Generate the clock schedule.
         3. Call self.compute to compute the micro-batches in parallel.
         4. Concatenate the micro-batches to form the mini-batch and return it.
-        
+
         Please note that you should put the result on the last device. Putting the result on the same device as input x will lead to pipeline parallel training failing.
-        '''
+        """
         # BEGIN ASSIGN5_2_2
-        raise NotImplementedError("Pipeline Parallel Not Implemented Yet")
+        # 1. Divide the input mini-batch into micro-batches.
+        micro_batches = list(torch.split(x, self.split_size, dim=0))
+
+        # 2. Generate the clock schedule.
+        schedule = _clock_cycles(len(micro_batches), len(self.partitions))
+
+        # 3. Call self.compute to compute the micro-batches in parallel.
+        self.compute(micro_batches, schedule)
+
+        # 4. Concatenate the micro-batches to form the mini-batch and return it.
+        # The return value should be put in the last device.
+        return torch.cat(micro_batches, dim=0).to(self.devices[-1])
         # END ASSIGN5_2_2
 
-    def compute(self, batches, schedule: List[Tuple[int, int]]) -> None:
-        '''Compute the micro-batches in parallel.
+    def compute(self, batches, schedule) -> None:
+        """Compute the micro-batches in parallel.
 
         Hint:
         1. Retrieve the partition and microbatch from the schedule.
-        2. Use Task to send the computation to a worker. 
+        2. Use Task to send the computation to a worker.
         3. Use the in_queues and out_queues to send and receive tasks.
         4. Store the result back to the batches.
-        '''
+        """
         partitions = self.partitions
         devices = self.devices
 
         # BEGIN ASSIGN5_2_2
-        raise NotImplementedError("Pipeline Parallel Not Implemented Yet")
-        # END ASSIGN5_2_2
+        # Process each clock cycle
+        for clock_idx, clock_schedule in enumerate(schedule):
+            # Submit all tasks for this clock cycle
+            for micro_idx, part_idx in clock_schedule:
+                # Get the current microbatch
+                input_tensor = batches[micro_idx]
+                partition = partitions[part_idx]
+                device = devices[part_idx]
 
+                # Create task with closure that captures values correctly
+                def make_compute(tensor, part, dev, m_idx, p_idx):
+                    def compute_fn():
+                        # Don't use non_blocking when moving from MPS to CPU due to race condition
+                        input_on_device = tensor.to(dev)
+                        result = part(input_on_device)
+                        return result
+
+                    return compute_fn
+
+                task = Task(
+                    make_compute(input_tensor, partition, device, micro_idx, part_idx)
+                )
+
+                # Submit task to the worker queue for this partition
+                self.in_queues[part_idx].put(task)
+
+            # Collect results for this clock cycle
+            for micro_idx, part_idx in clock_schedule:
+                success, payload = self.out_queues[part_idx].get()
+                if not success:
+                    exc_info = payload
+                    raise RuntimeError("Worker raised an exception") from exc_info[1]
+                task_obj, result = payload
+
+                # Update the batch with the result
+                # Handle case where result might be a tuple (from model outputs)
+                if isinstance(result, tuple) and len(result) > 0:
+                    # Take the first element if it's a tuple (typically the hidden states)
+                    batches[micro_idx] = result[0]
+                else:
+                    batches[micro_idx] = result
+        # END ASSIGN5_2_2

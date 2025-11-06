@@ -1,5 +1,5 @@
 torch==2.2.0
-matplotlib==3.8.3
+matplotlib
 datasets
 embeddings==0.0.8
 transformers==4.37.2
